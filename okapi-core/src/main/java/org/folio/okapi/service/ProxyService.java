@@ -592,6 +592,8 @@ public class ProxyService {
             + bcontent + "'");
           if (pc.getAuthRes() != 0 && (pc.getAuthRes() < 200 || pc.getAuthRes() >= 300)) {
             ctx.response().end(pc.getAuthResBody());
+          } else if (ctx.response().getStatusCode() == 204) {
+            ctx.response().end();
           } else {
             ctx.response().end(bcontent);
           }
