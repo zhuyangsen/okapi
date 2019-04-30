@@ -1,4 +1,4 @@
-package org.folio.okapi;
+package org.folio.okapi.managers;
 
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
@@ -17,6 +17,7 @@ import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import io.vertx.ext.web.Router;
+import org.folio.okapi.MainVerticle;
 import org.folio.okapi.common.OkapiLogger;
 import static org.hamcrest.Matchers.*;
 import org.junit.Assert;
@@ -142,8 +143,7 @@ public class PullTest {
 
   }
 
-  @Test
-  public void test2() {
+  private void pullIncremental(boolean incremental) {
     RestAssuredClient c;
 
     final String pullDoc = "{" + LS
@@ -155,7 +155,7 @@ public class PullTest {
     c = api.createRestAssured3();
     c.given().port(port2)
       .header("Content-Type", "application/json")
-      .body(pullDoc).post("/_/proxy/pull/modules")
+      .body(pullDoc).post("/_/proxy/pull/modules?incremental=" + incremental)
       .then().statusCode(200).log().ifValidationFails()
       .body(equalTo("[ ]"));
     Assert.assertTrue(
@@ -220,7 +220,7 @@ public class PullTest {
     c = api.createRestAssured3();
     c.given().port(port2)
       .header("Content-Type", "application/json")
-      .body(pullDoc).post("/_/proxy/pull/modules")
+      .body(pullDoc).post("/_/proxy/pull/modules?incremental=" + incremental)
       .then().statusCode(200).log().ifValidationFails()
       .body(equalTo("[ " + docBriefModuleA + " ]"));
     Assert.assertTrue(
@@ -273,7 +273,7 @@ public class PullTest {
     c = api.createRestAssured3();
     c.given().port(port2)
       .header("Content-Type", "application/json")
-      .body(pullDoc).post("/_/proxy/pull/modules")
+      .body(pullDoc).post("/_/proxy/pull/modules?incremental=" + incremental)
       .then().statusCode(200).log().ifValidationFails();
     Assert.assertTrue(
       "raml: " + c.getLastReport().toString(),
@@ -282,7 +282,7 @@ public class PullTest {
     c = api.createRestAssured3();
     c.given().port(port2)
       .header("Content-Type", "application/json")
-      .body(pullDoc).post("/_/proxy/pull/modules")
+      .body(pullDoc).post("/_/proxy/pull/modules?incremental=" + incremental)
       .then().statusCode(200).log().ifValidationFails()
       .body(equalTo("[ ]"));
     Assert.assertTrue(
@@ -476,6 +476,16 @@ public class PullTest {
       "raml: " + c.getLastReport().toString(),
       c.getLastReport().isEmpty());
 
+  }
+
+  @Test
+  public void test2a() {
+    pullIncremental(false);
+  }
+
+  @Test
+  public void test2b() {
+    pullIncremental(true);
   }
 
   @Test

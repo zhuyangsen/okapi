@@ -11,7 +11,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.TreeMap;
+import java.util.Set;
+import java.util.TreeSet;
 import org.folio.okapi.bean.ModuleDescriptor;
 import org.folio.okapi.bean.PullDescriptor;
 import org.folio.okapi.common.ErrorType;
@@ -28,6 +29,7 @@ public class PullManager {
   private final HttpClient httpClient;
   private int concurrentRuns;
   private static final int CONCURRENT_MAX = 10;
+  private static final int FULL_FETCH_MIN = 100;
   private boolean concurrentComplete;
   private final ModuleManager moduleManager;
   private Messages messages = Messages.getInstance();
@@ -74,13 +76,16 @@ public class PullManager {
     }
   }
 
-  private void getList(String urlBase,
+  private void getList(String urlBase, boolean full,
     Handler<ExtendedAsyncResult<ModuleDescriptor[]>> fut) {
     String url = urlBase;
     if (!url.endsWith("/")) {
       url += "/";
     }
     url += "_/proxy/modules";
+    if (full) {
+      url += "?full=true";
+    }
     final Buffer body = Buffer.buffer();
     HttpClientRequest req = httpClient.getAbs(url, res -> {
       res.handler(body::appendBuffer);
@@ -164,41 +169,71 @@ public class PullManager {
     req.end();
   }
 
-  private void merge(String urlBase, List<ModuleDescriptor> mlLocal,
+  private void localInsert(List<ModuleDescriptor> mlList, List<ModuleDescriptor> mlAdd,
+    Handler<ExtendedAsyncResult<List<ModuleDescriptor>>> fut) {
+    logger.info("pull: local insert");
+
+    moduleManager.createList(mlList, true, true, true, res1 -> {
+      if (res1.failed()) {
+        fut.handle(new Failure<>(res1.getType(), res1.cause()));
+      } else {
+        fut.handle(new Success<>(mlAdd));
+      }
+    });
+
+  }
+
+  private void merge(String urlBase, boolean incremental, List<ModuleDescriptor> mlLocal,
     ModuleDescriptor[] mlRemote, Handler<ExtendedAsyncResult<List<ModuleDescriptor>>> fut) {
 
-    TreeMap<String, Boolean> enabled = new TreeMap<>();
+    Set<String> enabled = new TreeSet<>();
     for (ModuleDescriptor md : mlLocal) {
-      enabled.put(md.getId(), false);
+      enabled.add(md.getId());
     }
-
     List<ModuleDescriptor> mlAdd = new LinkedList<>();
     for (ModuleDescriptor md : mlRemote) {
-      if (!"okapi".equals(md.getProduct()) && enabled.get(md.getId()) == null) {
+      if (!"okapi".equals(md.getProduct()) && !enabled.contains(md.getId())) {
         mlAdd.add(md);
       }
     }
-    logger.info("pull: " + mlAdd.size() + " MDs to fetch");
-    List<ModuleDescriptor> mlList = new LinkedList<>();
-    concurrentRuns = 0;
-    concurrentComplete = false;
-    getFull(urlBase, mlAdd.iterator(), mlList, res -> {
-      if (res.failed()) {
-        fut.handle(new Failure<>(res.getType(), res.cause()));
-      } else {
-        logger.info("pull: local insert");
-        moduleManager.createList(mlList, true, true, true, res1 -> {
-          if (res1.failed()) {
-            fut.handle(new Failure<>(res1.getType(), res1.cause()));
-          } else {
-            fut.handle(new Success<>(mlAdd));
+    final List<ModuleDescriptor> mlList = new LinkedList<>();
+    // disable incremental mode if more than a certain
+    // number of MDs are to be fetched
+    if (incremental && mlAdd.size() >= FULL_FETCH_MIN) {
+      incremental = false;
+    }
+    logger.info("pull: " + mlAdd.size() + " MDs to fetch incremental=" + incremental);
+    if (!incremental) {
+      getList(urlBase, true, res -> {
+        if (res.failed()) {
+          fut.handle(new Failure<>(res.getType(), res.cause()));
+          return;
+        }
+        ModuleDescriptor[] rList = res.result();
+        for (int i = 0; i < rList.length; i++) {
+          ModuleDescriptor rMd = rList[i];
+          if (!"okapi".equals(rMd.getProduct()) && !enabled.contains(rMd.getId())) {
+            mlList.add(rMd);
           }
-        });
-      }
-    });
+        }
+        localInsert(mlList, mlAdd, fut);
+      });
+    } else {
+      concurrentRuns = 0;
+      concurrentComplete = false;
+      getFull(urlBase, mlAdd.iterator(), mlList, res -> {
+        if (res.failed()) {
+          fut.handle(new Failure<>(res.getType(), res.cause()));
+        } else {
+          localInsert(mlList, mlAdd, fut);
+        }
+      });
+    }
   }
 
-  public void pull(PullDescriptor pd, Handler<ExtendedAsyncResult<List<ModuleDescriptor>>> fut) {
+  public void pull(PullDescriptor pd, Boolean incremental,
+    Handler<ExtendedAsyncResult<List<ModuleDescriptor>>> fut) {
+
     getRemoteUrl(Arrays.asList(pd.getUrls()).iterator(), resUrl -> {
       if (resUrl.failed()) {
         fut.handle(new Failure<>(resUrl.getType(), resUrl.cause()));
@@ -207,11 +242,11 @@ public class PullManager {
           if (resLocal.failed()) {
             fut.handle(new Failure<>(resLocal.getType(), resLocal.cause()));
           } else {
-            getList(resUrl.result(), resRemote -> {
+            getList(resUrl.result(), false, resRemote -> {
               if (resRemote.failed()) {
                 fut.handle(new Failure<>(resRemote.getType(), resRemote.cause()));
               } else {
-                merge(resUrl.result(), resLocal.result(), resRemote.result(), fut);
+                merge(resUrl.result(), incremental, resLocal.result(), resRemote.result(), fut);
               }
             });
           }

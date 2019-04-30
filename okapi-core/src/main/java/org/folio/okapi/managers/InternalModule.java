@@ -1191,12 +1191,14 @@ public class InternalModule {
     });
   }
 
-  private void pullModules(String body,
+  private void pullModules(ProxyContext pc, String body,
     Handler<ExtendedAsyncResult<String>> fut) {
 
+
     try {
+      final boolean incremental = ModuleUtil.getParamBoolean(pc.getCtx().request(), "incremental", true);
       final PullDescriptor pmd = Json.decodeValue(body, PullDescriptor.class);
-      pullManager.pull(pmd, res -> {
+      pullManager.pull(pmd, incremental, res -> {
         if (res.failed()) {
           fut.handle(new Failure<>(res.getType(), res.cause()));
           return;
@@ -1378,7 +1380,7 @@ public class InternalModule {
       // /_/proxy/pull/modules
       if (n == 5 && segments[3].equals("pull") && segments[4].equals("modules")
         && m.equals(POST) && pullManager != null) {
-        pullModules(req, fut);
+        pullModules(pc, req, fut);
         return;
       }
       // /_/proxy/health

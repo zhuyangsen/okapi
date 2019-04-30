@@ -922,6 +922,11 @@ types:
       repository. The PullDescriptor includes one or more URLs. And
       the operation will try all URLs in order until one succeeds. Hence,
       the URLs should be pointing to identical remote repositories.
+    queryParameters:
+      incremental:
+        description: whether to use incremental pull or not (default is true)
+        type: boolean
+        required: false
     body:
       application/json:
         type: PullDescriptor
