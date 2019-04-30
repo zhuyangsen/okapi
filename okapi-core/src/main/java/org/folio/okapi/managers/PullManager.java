@@ -78,16 +78,18 @@ public class PullManager {
 
   private void getList(String urlBase, boolean full,
     Handler<ExtendedAsyncResult<ModuleDescriptor[]>> fut) {
-    String url = urlBase;
-    if (!url.endsWith("/")) {
-      url += "/";
+    StringBuilder url = new StringBuilder(urlBase);
+    if (!urlBase.endsWith("/")) {
+      url.append("/");
     }
-    url += "_/proxy/modules";
+    url.append("_/proxy/modules");
     if (full) {
-      url += "?full=true";
+      url.append("?full=true");
     }
     final Buffer body = Buffer.buffer();
-    HttpClientRequest req = httpClient.getAbs(url, res -> {
+    logger.info("GET " + url);
+    HttpClientRequest req = httpClient.getAbs(url.toString(), res -> {
+      logger.info("GET " + url + " response " + res.statusCode());
       res.handler(body::appendBuffer);
       res.endHandler(x -> {
         if (res.statusCode() != 200) {
@@ -101,6 +103,7 @@ public class PullManager {
       res.exceptionHandler(x
         -> fut.handle(new Failure<>(ErrorType.INTERNAL, x.getMessage())));
     });
+    req.putHeader("Accept", "application/json");
     req.exceptionHandler(x
       -> fut.handle(new Failure<>(ErrorType.INTERNAL, x.getMessage())));
     req.end();
