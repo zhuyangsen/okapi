@@ -2,16 +2,21 @@ package org.folio.okapi.util;
 
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.DecodeException;
+import io.vertx.core.logging.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import org.folio.okapi.bean.InterfaceDescriptor;
 import org.folio.okapi.bean.ModuleDescriptor;
 import org.folio.okapi.common.Messages;
 import org.folio.okapi.common.ModuleId;
+import org.folio.okapi.common.OkapiLogger;
 
 public class ModuleUtil {
+  private static final Logger logger = OkapiLogger.get();
+
   private ModuleUtil() {
     throw new IllegalAccessError(this.toString());
   }
@@ -74,11 +79,27 @@ public class ModuleUtil {
     final String requireStr = req.getParam("require");
     final String orderByStr = req.getParam("orderBy");
     final String orderStr = req.getParam("order");
+    final boolean core = getParamBoolean(req, "core", false);
+    final boolean redundant = getParamBoolean(req, "redundant", false);
     final boolean preRelease = getParamBoolean(req, "preRelease", true);
     final boolean npmSnapshot = getParamBoolean(req, "npmSnapshot", true);
     final String scope = req.getParam("scope");
     if (!full) {
         full = getParamBoolean(req, "full", false);
+    }
+    if (core) {
+      List<ModuleDescriptor> coreList = new LinkedList<>();
+      List<ModuleDescriptor> redundantList = new LinkedList<>();
+      DepResolution.getCoreModules(list, coreList, redundantList);
+      logger.info("all=" + list.size() + " core=" + coreList.size() + " redundant=" + redundantList.size());
+      list = coreList;
+    }
+    if (redundant) {
+      List<ModuleDescriptor> coreList = new LinkedList<>();
+      List<ModuleDescriptor> redundantList = new LinkedList<>();
+      DepResolution.getCoreModules(list, coreList, redundantList);
+      logger.info("all=" + list.size() + " core=" + coreList.size() + " redundant=" + redundantList.size());
+      list = redundantList;
     }
     Iterator<ModuleDescriptor> iterator = list.iterator();
     while (iterator.hasNext()) {

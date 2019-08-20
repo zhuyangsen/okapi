@@ -1,6 +1,7 @@
 package org.folio.okapi.util;
 
 import io.vertx.core.Handler;
+import io.vertx.core.json.Json;
 import io.vertx.core.logging.Logger;
 import java.util.Collection;
 import java.util.Collections;
@@ -528,5 +529,37 @@ public class DepResolution {
       no++;
     }
     return mdl;
+  }
+
+  public static void getCoreModules(List<ModuleDescriptor> mdl,
+    List<ModuleDescriptor> coreList, List<ModuleDescriptor> redundantList) {
+
+    Collections.sort(mdl);
+    ModuleDescriptor mdPrev = null;
+    Iterator<ModuleDescriptor> it = mdl.listIterator();
+    while (it.hasNext()) {
+      ModuleDescriptor mdNext = it.next();
+      if (mdPrev != null) {
+        ModuleId idPrev = new ModuleId(mdPrev.getId());
+        boolean redundant = false;
+        if (mdPrev.getProduct().equals(mdNext.getProduct())
+          && (idPrev.hasPreRelease() || idPrev.hasNpmSnapshot())) {
+          String prevProvides = Json.encodePrettily(mdPrev.getProvidesList());
+          String nextProvides = Json.encodePrettily(mdNext.getProvidesList());
+          if (nextProvides.equals(prevProvides)) {
+            redundant = true;
+          }
+        }
+        if (redundant) {
+          redundantList.add(mdPrev);
+        } else {
+          coreList.add(mdPrev);
+        }
+      }
+      mdPrev = mdNext;
+    }
+    if (mdPrev != null) {
+      coreList.add(mdPrev);
+    }
   }
 }
