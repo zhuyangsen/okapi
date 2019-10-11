@@ -404,7 +404,7 @@ public class ProxyService {
    */
   private void authResponse(HttpClientResponse res, ProxyContext pc) {
     String modTok = res.headers().get(XOkapiHeaders.MODULE_TOKENS);
-    if (modTok != null && !modTok.isEmpty()) {
+    if (modTok != null) {
       JsonObject jo = new JsonObject(modTok);
       for (ModuleInstance mi : pc.getModList()) {
         String id = mi.getModuleDescriptor().getId();
@@ -441,10 +441,6 @@ public class ProxyService {
    */
   private void relayToRequest(HttpClientResponse res, ProxyContext pc,
     ModuleInstance mi) {
-    if (XOkapiHeaders.FILTER_AUTH.equals(mi.getRoutingEntry().getPhase())
-      && res.headers().contains(XOkapiHeaders.MODULE_TOKENS)) {
-      authResponse(res, pc);
-    }
     // Sanitize both request headers (to remove the auth stuff we may have added)
     // and response headers (to remove stuff the auth module may have added)
     sanitizeAuthHeaders(res.headers());
@@ -676,7 +672,7 @@ public class ProxyService {
 
   private void copyHeaders(HttpClientRequest cReq, RoutingContext ctx, ModuleInstance mi) {
     int sz = 0;
-    int limit = 5; // all headers dumped
+    int limit = 2000; // all headers dumped
     for (String name : ctx.request().headers().names()) {
       List<String> values = ctx.request().headers().getAll(name);
       if (values.size() > 1) {
@@ -820,6 +816,9 @@ public class ProxyService {
       } else {
         newIt = it;
       }
+      if (XOkapiHeaders.FILTER_AUTH.equals(mi.getRoutingEntry().getPhase())) {
+        authResponse(res, pc);
+      }
       if (newIt.hasNext()) {
         relayToRequest(res, pc, mi);
         storeResponseInfo(pc, mi, res);
@@ -939,6 +938,15 @@ public class ProxyService {
       if (pathPattern != null) {
         ctx.request().headers().set(XOkapiHeaders.MATCH_PATH_PATTERN, pathPattern);
       }
+      
+      /*
+      Map<MultiMap,MultiMap> headersCache = new HashMap<>();
+      
+      MultiMap responseHeaders = headersCache.get(ctx.request().headers());
+      if (responseHeaders != null) {
+        Iterator<ModuleInstance> newIt;
+      }
+      */
       switch (pType) {
         case REQUEST_ONLY:
           proxyRequestOnly(it, pc, stream, bcontent, cReqs, mi);
@@ -1121,13 +1129,17 @@ public class ProxyService {
         return;
       }
       OkapiClient cli = res.result();
-      String deftok = cli.getRespHeaders().get(XOkapiHeaders.TOKEN);
-      logger.debug("authForSystemInterface:"
-        + Json.encode(cli.getRespHeaders().entries()));
-      String modTok = cli.getRespHeaders().get(XOkapiHeaders.MODULE_TOKENS);
-      JsonObject jo = new JsonObject(modTok);
-      String token = jo.getString(inst.getModuleDescriptor().getId(), deftok);
-      logger.debug("authForSystemInterface: Got token " + token);
+      String token = cli.getRespHeaders().get(XOkapiHeaders.TOKEN);
+      if (token != null) {
+        logger.debug("authForSystemInterface:"
+          + Json.encode(cli.getRespHeaders().entries()));
+        String modTok = cli.getRespHeaders().get(XOkapiHeaders.MODULE_TOKENS);
+        if (modTok != null) {
+          JsonObject jo = new JsonObject(modTok);
+          token = jo.getString(inst.getModuleDescriptor().getId(), token);
+        }
+        logger.debug("authForSystemInterface: Got token " + token);
+      }
       doCallSystemInterface(headers, tenantId, token, inst, null, request, fut);
     });
   }
