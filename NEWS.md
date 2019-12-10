@@ -1,6 +1,6 @@
 ## 2.35.2 2019-12-10
 
- * OKAPI-784 CORS: Allox X-Okapi-Module-Id
+ * OKAPI-784 CORS: Allow X-Okapi-Module-Id
 
 ## 2.35.1 2019-11-28
 
